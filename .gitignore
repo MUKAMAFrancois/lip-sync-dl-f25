@@ -1,0 +1,28 @@
+# Ignore Python Cache
+__pycache__/
+*.py[cod]
+
+# Ignore Data (Too large for Git)
+data/german/train/*.mp4
+data/german/test/*.mp4
+data/german/valid/*.mp4
+data/german/preprocessed/
+
+# Ignore Pre-trained Models & checkpoints
+*.pth
+*.pt
+training/checkpoints/
+training/logs/
+
+# Ignore the cloned sub-repository (We re-clone it via script)
+Wav2Lip/
+
+# Ignore Jupyter outputs
+.ipynb_checkpoints/
+
+# data
+data/
+.DS_Store
+
+# virtual environments
+virtual_env/

@@ -1,0 +1,31 @@
+# --- Core ML & Data ---
+torch>=2.0.0
+numpy<2.0.0            # Coqui-TTS and Numba often break with Numpy 2.x
+pandas
+tqdm
+scipy
+
+# --- Audio & Video Processing ---
+ffmpeg-python          # Python bindings for FFMPEG
+opencv-python          # For video frame extraction (cv2)
+pydub                  # For audio slicing/manipulation
+librosa>=0.10.0        # Essential for Wav2Lip audio feature extraction
+soundfile              # Backend for audio saving
+
+# --- Pipeline Components (Inference) ---
+openai-whisper         # ASR Step
+transformers           # MT Step (NLLB)
+sentencepiece          # Required by NLLB tokenizer
+coqui-tts              # TTS Step (XTTS-v2)
+demucs                 # Source Separation
+
+# --- Wav2Lip Training & Evaluation (New) ---
+face-alignment         # State-of-the-Art Face Detector for Preprocessing & Metrics
+scikit-image           # For SSIM calculation (Image Quality Metric)
+pytorch-fid            # For FID calculation (Realism Metric)
+torchvision            # Required by FID and Face Alignment
+
+# --- Utilities ---
+yt_dlp                 # For downloading dataset videos
+wget                   # For downloading weights
+xmltodict              # For parsing legacy MTEDx metadata
