@@ -2,6 +2,22 @@ import os
 import subprocess
 from pathlib import Path
 import sys
+import urllib.request  # <--- Standard Python library for downloading
+
+def reporthook(blocknum, blocksize, totalsize):
+    """
+    Callback for urllib to show download progress.
+    """
+    readsofar = blocknum * blocksize
+    if totalsize > 0:
+        percent = readsofar * 1e2 / totalsize
+        s = "\r%5.1f%% %*d / %d" % (
+            percent, len(str(totalsize)), readsofar, totalsize)
+        sys.stderr.write(s)
+        if readsofar >= totalsize: # near the end
+            sys.stderr.write("\n")
+    else: # total size is unknown
+        sys.stderr.write("read %d\n" % (readsofar,))
 
 def setup():
     # 1. Define Root Path (Current Directory)
@@ -15,30 +31,29 @@ def setup():
         try:
             subprocess.run(["git", "clone", "https://github.com/Rudrabha/Wav2Lip.git"], check=True)
         except subprocess.CalledProcessError:
-            print("❌ Error cloning Wav2Lip.")
+            print("❌ Error cloning Wav2Lip. Check git installation.")
             return
 
     # 3. Download Pre-trained GAN Weights (The Foundation)
-    # We use the GAN model because it produces sharper images than the standard model.
     os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
     weights_path = CHECKPOINTS_DIR / "wav2lip_gan.pth"
     
     if not weights_path.exists():
         print(f"⬇️ Downloading GAN Weights to {weights_path}...")
+        url = "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth"
+        
         try:
-            # Using curl for cross-platform compatibility (or wget via subprocess)
-            url = "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth"
-            subprocess.run(["wget", "-q", "-O", str(weights_path), url], check=True)
-            print("✅ Weights downloaded.")
+            # Cross-platform download using Python
+            urllib.request.urlretrieve(url, str(weights_path), reporthook)
+            print("✅ Weights downloaded successfully.")
         except Exception as e:
-            print(f"❌ Error downloading weights: {e}")
-            print("   Please download 'wav2lip_gan.pth' manually and place it in Wav2Lip/checkpoints/")
+            print(f"\n❌ Error downloading weights: {e}")
+            print("👉 Manual Fix: Download this link and put it in Wav2Lip/checkpoints/")
+            print(f"   {url}")
     else:
         print("✅ Weights already present.")
 
-    # 4. Patching (Optional but Recommended)
-    # If running on newer PyTorch, we might need to patch audio.py. 
-    # For now, we assume requirements.txt handles versioning, but we can verify file existence.
+    # 4. Verify Structure
     if (WAV2LIP_DIR / "audio.py").exists():
         print("✅ Wav2Lip structure verified.")
 

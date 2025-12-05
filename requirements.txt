@@ -1,31 +1,34 @@
 # --- Core ML & Data ---
-torch>=2.0.0
-numpy<2.0.0            # Coqui-TTS and Numba often break with Numpy 2.x
+numpy==1.26.4          # Strictly pinned to prevent Numba/Coqui crashes
+torch>=2.1.0
 pandas
 tqdm
 scipy
 
 # --- Audio & Video Processing ---
-ffmpeg-python          # Python bindings for FFMPEG
-opencv-python          # For video frame extraction (cv2)
-pydub                  # For audio slicing/manipulation
-librosa>=0.10.0        # Essential for Wav2Lip audio feature extraction
-soundfile              # Backend for audio saving
+ffmpeg-python
+opencv-python
+pydub
+librosa==0.10.1        # Pinned for stability
+soundfile
 
 # --- Pipeline Components (Inference) ---
-openai-whisper         # ASR Step
-transformers           # MT Step (NLLB)
-sentencepiece          # Required by NLLB tokenizer
-coqui-tts              # TTS Step (XTTS-v2)
-demucs                 # Source Separation
+openai-whisper
+# CRITICAL FIX: Pin transformers to stop the download loop
+transformers==4.42.4
+sentencepiece
+coqui-tts              # Now it will accept the transformers version above
+demucs
 
-# --- Wav2Lip Training & Evaluation (New) ---
-face-alignment         # State-of-the-Art Face Detector for Preprocessing & Metrics
-scikit-image           # For SSIM calculation (Image Quality Metric)
-pytorch-fid            # For FID calculation (Realism Metric)
-torchvision            # Required by FID and Face Alignment
+# --- Wav2Lip Training & Evaluation ---
+face-alignment
+scikit-image
+pytorch-fid
+torchvision
 
 # --- Utilities ---
-yt_dlp                 # For downloading dataset videos
-wget                   # For downloading weights
-xmltodict              # For parsing legacy MTEDx metadata
+yt_dlp
+wget
+xmltodict
+
+# pip install coqui-tts demucs face-alignment scikit-image pytorch-fid torchvision yt_dlp wget xmltodict

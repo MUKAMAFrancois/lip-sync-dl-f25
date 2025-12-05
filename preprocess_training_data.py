@@ -12,10 +12,9 @@ DATA_ROOT = Path("data/german")
 OUTPUT_ROOT = Path("data/german/preprocessed")
 FILELISTS_DIR = Path("data/german/filelists")
 
-# Map your folders to Wav2Lip splits
 SPLITS = {
     "train": "train",
-    "valid": "val",  # Wav2Lip standard name is 'val'
+    "valid": "val",
     "test": "test"
 }
 
@@ -33,6 +32,7 @@ except ImportError:
     sys.exit(1)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# Keep face detector on GPU, but process batches carefully
 fa = FaceAlignment(LandmarksType._2D, flip_input=False, device=device)
 
 def process_video(video_path, output_subdir):
@@ -40,44 +40,57 @@ def process_video(video_path, output_subdir):
     save_dir = output_subdir / video_name
     
     if save_dir.exists():
-        return [video_name] # Skip if done
+        # Check if it actually has data, otherwise overwrite
+        if len(list(save_dir.glob("*.jpg"))) > 10:
+            return [video_name]
+        else:
+            shutil.rmtree(save_dir)
 
     os.makedirs(save_dir, exist_ok=True)
     
     # 1. Extract Audio
     audio_path = save_dir / "audio.wav"
-    cmd = f'ffmpeg -y -i "{video_path}" -ac 1 -vn -acodec pcm_s16le -ar 16000 "{audio_path}" -loglevel quiet'
+    # -y overwrite, -vn no video, -ac 1 mono, 16k sample rate
+    cmd = f'ffmpeg -y -v error -i "{video_path}" -ac 1 -vn -acodec pcm_s16le -ar 16000 "{audio_path}"'
     os.system(cmd)
     
-    # 2. Read Frames
+    # 2. Open Video Stream
     cap = cv2.VideoCapture(str(video_path))
-    frames = []
+    
+    # Memory Safe Batching
+    batch_size = 16  # Process 16 frames at a time (Low RAM usage)
+    valid_frames_count = 0
+    global_frame_idx = 0 # Keeps track of frame number across batches
+    
     while True:
-        ret, frame = cap.read()
-        if not ret: break
-        frames.append(frame)
-    cap.release()
-    
-    if not frames: return []
-
-    # 3. Detect & Crop
-    batch_size = 4
-    valid_frames = 0
-    
-    for i in range(0, len(frames), batch_size):
-        batch = frames[i:i+batch_size]
+        batch = []
+        # Read a chunk of frames
+        for _ in range(batch_size):
+            ret, frame = cap.read()
+            if not ret: break
+            batch.append(frame)
+            
+        if not batch: break # End of video
+        
+        # 3. Detect & Crop (On this small batch only)
         try:
+            # S3FD usually expects a numpy array of frames
+            # batch_np shape: [Batch_Size, H, W, 3]
             preds = fa.get_detections_for_batch(np.array(batch))
-        except: continue
+        except Exception as e:
+            # If detection fails on batch, skip it (rare)
+            global_frame_idx += len(batch)
+            continue
             
         for j, rect in enumerate(preds):
-            if rect is None: continue
+            if rect is None: 
+                continue
             
-            # DeepMind-Style Crop: Focus on lower face
+            # DeepMind-Style Crop
             y1, y2, x1, x2 = rect
             cy, cx = (y1 + y2) // 2, (x1 + x2) // 2
             h = y2 - y1
-            size = int(h * 1.3) # 1.3x zoom captures chin to nose perfectly
+            size = int(h * 1.3)
             
             y_start = max(0, int(cy - size//2))
             y_end = min(batch[j].shape[0], int(cy + size//2))
@@ -87,12 +100,23 @@ def process_video(video_path, output_subdir):
             crop = batch[j][y_start:y_end, x_start:x_end]
             
             try:
-                crop = cv2.resize(crop, (96, 96)) # Standard Wav2Lip Input
-                cv2.imwrite(str(save_dir / f"{i+j:05d}.jpg"), crop)
-                valid_frames += 1
-            except: pass
+                crop = cv2.resize(crop, (96, 96))
+                
+                # Use global index so file names are continuous: 00000, 00001, ...
+                current_idx = global_frame_idx + j
+                cv2.imwrite(str(save_dir / f"{current_idx:05d}.jpg"), crop)
+                valid_frames_count += 1
+            except: 
+                pass
+        
+        # Increment counter by how many frames we read
+        global_frame_idx += len(batch)
+        
+        # Python's Garbage Collector will now free 'batch' memory
+        
+    cap.release()
             
-    return [video_name] if valid_frames > 10 else []
+    return [video_name] if valid_frames_count > 10 else []
 
 def main():
     os.makedirs(OUTPUT_ROOT, exist_ok=True)
@@ -101,7 +125,7 @@ def main():
     for folder_name, split_name in SPLITS.items():
         input_split_dir = DATA_ROOT / folder_name
         if not input_split_dir.exists():
-            print(f"⚠️ Warning: {folder_name} folder not found.")
+            print(f"⚠️ Warning: {folder_name} folder not found at {input_split_dir}")
             continue
             
         print(f"\n🎬 Processing split: {folder_name} -> {split_name}")
@@ -110,12 +134,10 @@ def main():
         manifest_lines = []
         
         for vid in tqdm(videos):
-            # We save everything into one big preprocessed folder, 
-            # but the manifest tells train.py which is which.
             results = process_video(vid, OUTPUT_ROOT)
             manifest_lines.extend(results)
             
-        # Write Manifest (train.txt / val.txt / test.txt)
+        # Write Manifest
         with open(FILELISTS_DIR / f"{split_name}.txt", "w") as f:
             for line in manifest_lines:
                 f.write(line + "\n")
