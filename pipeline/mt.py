@@ -1,3 +1,4 @@
+# pipeline/mt.py
 # pip install transformers -U
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 import torch

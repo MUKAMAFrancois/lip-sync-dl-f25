@@ -1,3 +1,4 @@
+# pipeline/duration_aligner.py
 import os
 import json
 from pathlib import Path

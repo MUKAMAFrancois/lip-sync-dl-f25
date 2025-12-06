@@ -1,4 +1,4 @@
-# pipeline/main.py (Updated)
+# pipeline/main.py
 import os
 import argparse
 from pathlib import Path
