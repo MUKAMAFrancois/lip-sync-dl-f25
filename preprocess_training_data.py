@@ -138,7 +138,7 @@ def process_video(video_path, output_subdir, fa):
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
     # Optimize batch size based on GPU memory
-    batch_size = 32  # Good for 16GB+ VRAM
+    batch_size = 16  #
     valid_frames_count = 0
     global_frame_idx = 0 
     
