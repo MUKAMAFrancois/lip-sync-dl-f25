@@ -3,7 +3,7 @@ import os
 import subprocess
 from pathlib import Path
 import sys
-import urllib.request  # <--- Standard Python library for downloading
+import urllib.request
 
 def reporthook(blocknum, blocksize, totalsize):
     """
@@ -20,6 +20,19 @@ def reporthook(blocknum, blocksize, totalsize):
     else: # total size is unknown
         sys.stderr.write("read %d\n" % (readsofar,))
 
+def download_file(url, dest_path):
+    if dest_path.exists():
+        print(f"✅ Found: {dest_path.name}")
+        return
+
+    print(f"⬇️ Downloading {dest_path.name}...")
+    try:
+        urllib.request.urlretrieve(url, str(dest_path), reporthook)
+        print(f"✅ Download complete: {dest_path.name}")
+    except Exception as e:
+        print(f"\n❌ Error downloading {dest_path.name}: {e}")
+        print(f"👉 Manual Link: {url}")
+
 def setup():
     # 1. Define Root Path (Current Directory)
     ROOT_DIR = Path.cwd()
@@ -35,28 +48,22 @@ def setup():
             print("❌ Error cloning Wav2Lip. Check git installation.")
             return
 
-    # 3. Download Pre-trained GAN Weights (The Foundation)
+    # 3. Download Pre-trained Weights
+    # We need BOTH the GAN (to fine-tune) and the Expert (to calculate sync loss)
     os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
-    weights_path = CHECKPOINTS_DIR / "wav2lip_gan.pth"
     
-    if not weights_path.exists():
-        print(f"⬇️ Downloading GAN Weights to {weights_path}...")
-        url = "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth"
-        
-        try:
-            # Cross-platform download using Python
-            urllib.request.urlretrieve(url, str(weights_path), reporthook)
-            print("✅ Weights downloaded successfully.")
-        except Exception as e:
-            print(f"\n❌ Error downloading weights: {e}")
-            print("👉 Manual Fix: Download this link and put it in Wav2Lip/checkpoints/")
-            print(f"   {url}")
-    else:
-        print("✅ Weights already present.")
+    models_to_download = {
+        "wav2lip_gan.pth": "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth",
+        "lipsync_expert.pth": "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/lipsync_expert.pth"
+    }
+
+    print("\n--- Checking Checkpoints ---")
+    for filename, url in models_to_download.items():
+        download_file(url, CHECKPOINTS_DIR / filename)
 
     # 4. Verify Structure
     if (WAV2LIP_DIR / "audio.py").exists():
-        print("✅ Wav2Lip structure verified.")
+        print("\n✅ Wav2Lip structure verified.")
 
 if __name__ == "__main__":
     setup()
