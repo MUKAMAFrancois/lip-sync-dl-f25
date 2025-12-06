@@ -34,22 +34,33 @@ def download_file(url, dest_path):
         print(f"👉 Manual Link: {url}")
 
 def setup():
-    # 1. Define Root Path (Current Directory)
-    ROOT_DIR = Path.cwd()
-    WAV2LIP_DIR = ROOT_DIR / "Wav2Lip"
+    # 1. Define Paths
+    # CRITICAL CHANGE: We go UP one level (.parent) to place Wav2Lip next to our repo,
+    # not inside it.
+    PROJECT_ROOT = Path.cwd() 
+    WAV2LIP_DIR = PROJECT_ROOT.parent / "Wav2Lip"
     CHECKPOINTS_DIR = WAV2LIP_DIR / "checkpoints"
+
+    print(f"📂 Setting up Wav2Lip at: {WAV2LIP_DIR}")
 
     # 2. Clone Wav2Lip if missing
     if not WAV2LIP_DIR.exists():
-        print(f"⬇️ Cloning Wav2Lip into {WAV2LIP_DIR}...")
+        print(f"⬇️ Cloning Wav2Lip...")
         try:
-            subprocess.run(["git", "clone", "https://github.com/Rudrabha/Wav2Lip.git"], check=True)
+            # We explicitly run git clone in the parent directory
+            subprocess.run(
+                ["git", "clone", "https://github.com/Rudrabha/Wav2Lip.git"], 
+                cwd=PROJECT_ROOT.parent, # <--- Execute command in the parent folder
+                check=True
+            )
         except subprocess.CalledProcessError:
             print("❌ Error cloning Wav2Lip. Check git installation.")
             return
+    else:
+        print("✅ Wav2Lip repo already exists.")
 
-    # 3. Download Pre-trained Weights
-    # We need BOTH the GAN (to fine-tune) and the Expert (to calculate sync loss)
+    # 3. Download Pre-trained Weights (GAN + Expert)
+    # These are needed for fine-tuning.
     os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
     
     models_to_download = {
@@ -64,6 +75,7 @@ def setup():
     # 4. Verify Structure
     if (WAV2LIP_DIR / "audio.py").exists():
         print("\n✅ Wav2Lip structure verified.")
+        print(f"   path: {WAV2LIP_DIR}")
 
 if __name__ == "__main__":
     setup()
