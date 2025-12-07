@@ -155,31 +155,54 @@ def main():
     args = parser.parse_args()
     
     device = check_cuda(args.force_cpu) if not args.force_cpu else 'cpu'
-    INPUT_DATA, OUTPUT_ROOT, FILELISTS_DIR, BASE = setup_paths(args.kaggle)
-    FaceAlignment, LandmarksType = setup_wav2lip(args.kaggle)
     
+    # 1. Setup Paths
+    INPUT_DATA, OUTPUT_ROOT, FILELISTS_DIR, BASE = setup_paths(args.kaggle)
+    print(f"📂 Looking for data in: {INPUT_DATA.resolve()}")
+    
+    # 2. Setup Face Detector
+    FaceAlignment, LandmarksType = setup_wav2lip(args.kaggle)
     print(f"🔥 Initializing Face Detector on {device.upper()}...")
     fa = FaceAlignment(LandmarksType._2D, flip_input=False, device=device)
     
-    SPLITS = {"train": "train", "valid": "val"}
+    # 3. Process Splits (Added 'test' back)
+    SPLITS = {
+        "train": "train", 
+        "val": "val", 
+        "test": "test"
+    }
     
+    found_any = False
     for folder_name, split_name in SPLITS.items():
         input_split_dir = INPUT_DATA / folder_name
-        if not input_split_dir.exists(): continue
+        
+        # Explicit check with print
+        if not input_split_dir.exists():
+            print(f"⚠️ Skipping '{folder_name}': Directory not found at {input_split_dir}")
+            continue
             
+        found_any = True
         print(f"\n🎬 Processing: {folder_name} -> {split_name}")
         videos = list(input_split_dir.glob("*.mp4"))
+        print(f"   Found {len(videos)} videos.")
         
         manifest_lines = []
         for vid in tqdm(videos):
             results = process_video(vid, OUTPUT_ROOT, fa)
             manifest_lines.extend(results)
             
-        with open(FILELISTS_DIR / f"{split_name}.txt", "w") as f:
+        # Save filelist
+        list_path = FILELISTS_DIR / f"{split_name}.txt"
+        with open(list_path, "w") as f:
             for line in manifest_lines:
                 f.write(line + "\n")
+        print(f"   Saved list to {list_path}")
     
-    if not args.no_zip:
+    if not found_any:
+        print("\n❌ CRITICAL: No data folders found! Check your paths.")
+        print(f"   Expected structure: {INPUT_DATA}/train/...")
+
+    if not args.no_zip and found_any:
         print("📦 Zipping...")
         shutil.make_archive("german_preprocessed", 'zip', OUTPUT_ROOT)
 
