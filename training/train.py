@@ -9,29 +9,24 @@ from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
 
 # --- ROBUST IMPORT ---
-# Try to find Wav2Lip in cwd or parent
-possible_paths = [Path("Wav2Lip"), Path("../Wav2Lip")]
-for p in possible_paths:
-    if p.exists():
-        sys.path.append(str(p.resolve()))
-        break
-
-try:
-    from models import Wav2Lip, Wav2Lip_Disc_Qual, SyncNet_color
-except ImportError:
-    print("❌ Critical: Could not import Wav2Lip models.")
+# Explicitly add Wav2Lip to sys.path
+WAV2LIP_DIR = Path("Wav2Lip").resolve()
+if WAV2LIP_DIR.exists():
+    sys.path.insert(0, str(WAV2LIP_DIR))
+else:
+    print("❌ Wav2Lip folder not found!")
     sys.exit(1)
 
-# Import local modules (assumes running from project root)
-sys.path.append(str(Path.cwd()))
-try:
-    from training.hparams import hparams
-    from training.data_loader import GermanDataset
-except ImportError:
-    # Fallback if running directly inside training folder
-    sys.path.append("..")
-    from training.hparams import hparams
-    from training.data_loader import GermanDataset
+# Import Models (No Try/Except -> We want to see the error!)
+print("🔄 Importing Wav2Lip models...")
+from models import Wav2Lip, Wav2Lip_Disc_Qual, SyncNet_color
+print("✅ Import successful.")
+
+# Import local modules
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
+from training.hparams import hparams
+from training.data_loader import GermanDataset
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -44,10 +39,9 @@ def get_sync_loss(syncnet, mel, g):
 def train():
     print(f"🚀 Training on {DEVICE}")
     
-    # Paths (Hardcoded relative to project root for simplicity)
-    DATA_ROOT = Path("data/german/preprocessed")
-    FILELIST_ROOT = Path("data/german/filelists")
-    CHECKPOINTS_DIR = Path("checkpoints")
+    DATA_ROOT = PROJECT_ROOT / "data/german/preprocessed"
+    FILELIST_ROOT = PROJECT_ROOT / "data/german/filelists"
+    CHECKPOINTS_DIR = PROJECT_ROOT / "checkpoints"
     
     # 1. Models
     model = Wav2Lip().to(DEVICE)
@@ -56,15 +50,15 @@ def train():
     
     # Load Experts
     if not (CHECKPOINTS_DIR / "lipsync_expert.pth").exists():
-        print("❌ Expert model missing. Run setup_wav2lip.py")
+        print("❌ Expert model missing.")
         sys.exit(1)
 
-    sync_ckpt = torch.load("checkpoints/lipsync_expert.pth", map_location=DEVICE)
+    sync_ckpt = torch.load(CHECKPOINTS_DIR / "lipsync_expert.pth", map_location=DEVICE)
     syncnet.load_state_dict({k.replace('module.',''):v for k,v in sync_ckpt['state_dict'].items()})
     for p in syncnet.parameters(): p.requires_grad = False
     
-    gan_ckpt_path = "checkpoints/wav2lip_gan.pth"
-    if os.path.exists(gan_ckpt_path):
+    gan_ckpt_path = CHECKPOINTS_DIR / "wav2lip_gan.pth"
+    if gan_ckpt_path.exists():
         print("🔄 Warm-starting from Pretrained GAN")
         gan_ckpt = torch.load(gan_ckpt_path, map_location=DEVICE)
         model.load_state_dict({k.replace('module.',''):v for k,v in gan_ckpt['state_dict'].items()}, strict=False)
@@ -74,11 +68,12 @@ def train():
     scaler = GradScaler()
 
     # 2. Data
-    if not (FILELIST_ROOT / "train.txt").exists():
-        print("❌ Train list not found. Run preprocessing first.")
+    train_list = FILELIST_ROOT / "train.txt"
+    if not train_list.exists():
+        print(f"❌ Train list not found at {train_list}")
         return
 
-    train_ds = GermanDataset(DATA_ROOT, FILELIST_ROOT / "train.txt", hparams)
+    train_ds = GermanDataset(DATA_ROOT, train_list, hparams)
     train_loader = DataLoader(train_ds, batch_size=hparams['batch_size'], shuffle=True, num_workers=0)
 
     # 3. Loop
@@ -89,7 +84,8 @@ def train():
     model.train()
     print("🎬 Starting Loop...")
     
-    while global_step < 10000: # Short test run limit
+    # Limited steps for testing pipeline stability
+    while global_step < 50: 
         for input_frames, mel, gt_frames in tqdm(train_loader):
             input_frames, mel, gt_frames = input_frames.to(DEVICE), mel.to(DEVICE), gt_frames.to(DEVICE)
 
@@ -120,8 +116,10 @@ def train():
             disc_optimizer.zero_grad()
 
             global_step += 1
-            if global_step % 50 == 0:
+            if global_step % 10 == 0:
                 print(f"Step {global_step} | L1: {l1.item():.4f}")
+            
+            if global_step >= 50: break
 
 if __name__ == "__main__":
     train()

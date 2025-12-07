@@ -7,18 +7,27 @@ from tqdm import tqdm
 import torch
 import shutil
 import argparse
+import traceback
 
 def setup_wav2lip_import():
+    # Force add Wav2Lip to path
     p = Path("Wav2Lip")
     if p.exists():
-        sys.path.append(str(p.resolve()))
+        sys.path.insert(0, str(p.resolve()))
         try:
             from face_detection import FaceAlignment, LandmarksType
             return FaceAlignment, LandmarksType
         except ImportError:
-            pass
-    print("❌ Critical: Wav2Lip not found. Run setup_wav2lip.py first.")
-    sys.exit(1)
+            # Fallback for newer face-alignment versions installed via pip
+            try:
+                import face_alignment
+                return face_alignment.FaceAlignment, face_alignment.LandmarksType
+            except ImportError:
+                print("❌ Critical: face-alignment not found.")
+                sys.exit(1)
+    else:
+        print("❌ Critical: Wav2Lip folder not found.")
+        sys.exit(1)
 
 def compute_affine_transform(landmarks, target_size=256):
     if landmarks is None or len(landmarks) == 0: return None
@@ -36,10 +45,19 @@ def compute_affine_transform(landmarks, target_size=256):
 def process_video(video_path, output_root, fa):
     vid_name = video_path.stem
     save_dir = output_root / vid_name
-    if save_dir.exists(): shutil.rmtree(save_dir)
+    
+    # Skip if already processed
+    if save_dir.exists() and (save_dir / "audio.wav").exists():
+        return [vid_name]
+
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    os.system(f'ffmpeg -y -v error -i "{video_path}" -ac 1 -vn -acodec pcm_s16le -ar 16000 "{save_dir}/audio.wav"')
+    # Extract Audio
+    cmd = f'ffmpeg -y -v error -i "{video_path}" -ac 1 -vn -acodec pcm_s16le -ar 16000 "{save_dir}/audio.wav"'
+    ret = os.system(cmd)
+    if ret != 0:
+        print(f"⚠️ FFmpeg failed for {vid_name}")
+        return []
 
     cap = cv2.VideoCapture(str(video_path))
     frames = []
@@ -52,16 +70,22 @@ def process_video(video_path, output_root, fa):
     if not frames: return []
 
     valid_frames = 0
-    batch_size = 8 
-    # Use smaller batch size if memory is tight
+    batch_size = 4 # Reduced batch size for safety on L4/T4
     
     for i in range(0, len(frames), batch_size):
         batch = frames[i:i+batch_size]
         try:
-            preds = fa.get_detections_for_batch(np.array(batch))
+            # Handle different face_alignment APIs
+            try:
+                preds = fa.get_detections_for_batch(np.array(batch))
+            except AttributeError:
+                # Fallback for older APIs if get_detections_for_batch is missing
+                preds = [fa.get_landmarks_from_image(f) for f in batch]
+                # Unpack list of lists
+                preds = [p[0] if p else None for p in preds]
+
         except Exception as e:
-            # DEBUG: Print error if detection fails
-            # print(f"⚠️ Batch failed: {e}") 
+            # print(f"⚠️ Batch detection error: {e}") 
             continue
 
         for j, landmarks in enumerate(preds):
@@ -88,22 +112,34 @@ def main():
     print(f"🚀 Preprocessing on {device}")
     
     FaceAlignment, LandmarksType = setup_wav2lip_import()
-    fa = FaceAlignment(LandmarksType._2D, flip_input=False, device=device)
+    
+    # Robust LandmarksType check
+    try:
+        l_type = LandmarksType._2D
+    except AttributeError:
+        l_type = LandmarksType.TWO_D
+
+    fa = FaceAlignment(l_type, flip_input=False, device=device)
 
     data_root = Path(args.data_root)
+    # We prioritize 'train' to verify it works first
     for split in ['train', 'val', 'test']:
         split_dir = data_root / split
         if not split_dir.exists() and split == 'val': split_dir = data_root / 'valid'
         
-        if not split_dir.exists():
-            print(f"⚠️ Skipping {split}: Not found")
-            continue
+        if not split_dir.exists(): continue
 
         print(f"🎬 Processing {split}...")
         videos = list(split_dir.glob("*.mp4"))
         manifest = []
+        
+        # Use simple loop to print errors if tqdm swallows them
         for v in tqdm(videos):
-            manifest.extend(process_video(v, Path(args.output_root), fa))
+            try:
+                manifest.extend(process_video(v, Path(args.output_root), fa))
+            except Exception as e:
+                print(f"❌ Failed on {v.name}: {e}")
+                traceback.print_exc()
 
         os.makedirs(args.filelist_root, exist_ok=True)
         with open(Path(args.filelist_root) / f"{split}.txt", "w") as f:
