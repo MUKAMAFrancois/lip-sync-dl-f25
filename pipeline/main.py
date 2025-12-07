@@ -2,7 +2,6 @@
 import os
 import argparse
 from pathlib import Path
-import shutil
 import subprocess
 
 # Import modules
@@ -12,6 +11,7 @@ from tts import TTSProcessor
 from duration_aligner import DurationAligner
 from source_separator import SourceSeparator  
 from mixer import AudioMixer                  
+from inference import LipSyncProcessor  # <--- IMPORTING THE NEW MODULE
 
 def extract_audio_from_video(video_path, output_wav_path):
     if output_wav_path.exists():
@@ -26,7 +26,7 @@ def extract_audio_from_video(video_path, output_wav_path):
         return False
 
 def run_dubbing_pipeline(video_path, source_lang, target_lang="english"):
-    video_path = Path(video_path)
+    video_path = Path(video_path).resolve()
     output_dir = video_path.parent / "dubbing_output"
     output_dir.mkdir(exist_ok=True)
     
@@ -40,14 +40,12 @@ def run_dubbing_pipeline(video_path, source_lang, target_lang="english"):
     # --- Step 1: Source Separation (Demucs) ---
     print("\n--- Step 1: Source Separation (Demucs) ---")
     separator = SourceSeparator()
-    # This might take 30-60s on CPU
     separated_tracks = separator.separate(ref_audio_path, output_dir / "demucs")
     accompaniment_path = separated_tracks['accompaniment']
     
     # --- Step 2: ASR ---
     print("\n--- Step 2: ASR (Whisper) ---")
     asr = ASRProcessor()
-    # Use the ORIGINAL audio for transcription (contains vocals)
     asr_result = asr.transcribe(ref_audio_path, language=None)
     segments_path = output_dir / "segments.json"
     asr.save_segments(asr_result, segments_path)
@@ -71,7 +69,6 @@ def run_dubbing_pipeline(video_path, source_lang, target_lang="english"):
     
     for i, seg in enumerate(translated_segments):
         clip_path = tts_clips_dir / f"segment_{i}.wav"
-        # Use original audio as speaker reference
         tts.generate_audio(seg['text'], str(ref_audio_path), str(clip_path), language="en")
 
     # --- Step 5: Duration Alignment ---
@@ -80,26 +77,44 @@ def run_dubbing_pipeline(video_path, source_lang, target_lang="english"):
     clean_speech_track = output_dir / "aligned_speech_clean.wav"
     aligner.align_and_merge(str(video_path), tts_clips_dir, segments_path, clean_speech_track)
 
-    # --- INTERMEDIATE STEP: Create Final Audio Mix (Validation) ---
-    # We mix clean speech + background NOW so we can verify the result audibly
-    print("\n--- Mixing Final Audio (For Validation) ---")
+    # --- Intermediate Mix (Clean Speech + BG Music) ---
+    print("\n--- Mixing Final Audio (For Sync) ---")
     mixer = AudioMixer()
     final_dubbed_audio = output_dir / "final_dubbed_audio.wav"
     mixer.mix_audio(clean_speech_track, accompaniment_path, final_dubbed_audio, bg_volume=0.8)
 
-    # --- Step 6: Wav2Lip (Placeholder) ---
-    print("\n--- Step 6: Wav2Lip (Next Phase) ---")
-    print("To complete the video, you will run Wav2Lip with:")
-    print(f"  --face {video_path}")
-    print(f"  --audio {clean_speech_track}")
+    # --- Step 6: Visual Dubbing (Wav2Lip) ---
+    print("\n--- Step 6: Visual Dubbing (Inference) ---")
     
-    print("\nPipeline Complete!")
-    print(f"🎧 Listen to this file to verify the Dub: {final_dubbed_audio}")
-    return final_dubbed_audio
+    # Path to your latest checkpoint (Ensure you point to the one trained in train.py)
+    # If no custom training happened yet, use the base pretrained GAN
+    checkpoint_path = Path("checkpoints/wav2lip_gan.pth") 
+    
+    # If a trained checkpoint exists in checkpoints/, prioritize it
+    # custom_ckpt = Path("checkpoints/checkpoint_step000000001.pth") # Example name
+    # if custom_ckpt.exists(): checkpoint_path = custom_ckpt
+
+    lip_syncer = LipSyncProcessor(checkpoint_path=str(checkpoint_path))
+    
+    final_video_path = output_dir / f"{video_path.stem}_dubbed_en.mp4"
+    
+    lip_syncer.run(
+        face_path=str(video_path), 
+        audio_path=str(final_dubbed_audio), 
+        output_path=str(final_video_path)
+    )
+    
+    print("\n🎉 Pipeline Complete!")
+    print(f"🎬 Final Video: {final_video_path}")
+    return final_video_path
 
 if __name__ == "__main__":
     # Point to your test video
-    BASE_DIR = Path(__file__).parent.parent
-    TEST_VIDEO = BASE_DIR / "data/mtedx/video/de/train/0JI-oFgsdXw.mp4" 
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    # Example video path
+    TEST_VIDEO = BASE_DIR / "data/german/test/sample.mp4" 
+    
     if TEST_VIDEO.exists():
         run_dubbing_pipeline(TEST_VIDEO, source_lang="german")
+    else:
+        print(f"Please check TEST_VIDEO path in main.py: {TEST_VIDEO}")
