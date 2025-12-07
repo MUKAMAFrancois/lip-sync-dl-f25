@@ -1,4 +1,3 @@
-# training/train.py
 import sys
 import os
 from pathlib import Path
@@ -6,174 +5,113 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import numpy as np
 from tqdm import tqdm
-from torch.cuda.amp import autocast, GradScaler #
+from torch.cuda.amp import autocast, GradScaler
 
-# --- SETUP PATHS ---
-WAV2LIP_PATH = Path("../Wav2Lip") 
-if not WAV2LIP_PATH.exists():
-    WAV2LIP_PATH = Path("Wav2Lip")
-sys.path.append(str(WAV2LIP_PATH))
+# --- ROBUST IMPORT ---
+# Try to find Wav2Lip in cwd or parent
+possible_paths = [Path("Wav2Lip"), Path("../Wav2Lip")]
+for p in possible_paths:
+    if p.exists():
+        sys.path.append(str(p.resolve()))
+        break
 
 try:
     from models import Wav2Lip, Wav2Lip_Disc_Qual, SyncNet_color
 except ImportError:
-    print("❌ Error: Wav2Lip models not found.")
+    print("❌ Critical: Could not import Wav2Lip models.")
     sys.exit(1)
 
-from hparams import hparams
-from data_loader import GermanDataset
+# Import local modules (assumes running from project root)
+sys.path.append(str(Path.cwd()))
+from training.hparams import hparams
+from training.data_loader import GermanDataset
 
-# --- PERFORMANCE CONFIG ---
-DEVICE = 'cuda'
-ACCUMULATION_STEPS = 8 # Effective Batch = batch_size * 8 = 64 (Matches Paper)
-USE_AMP = True         # Mixed Precision for 2x Speed
-
-CHECKPOINT_DIR = Path("checkpoints")
-DATA_ROOT = Path("data/german/preprocessed")
-FILELIST_ROOT = Path("data/german/filelists")
-SYNC_EXPERT_PATH = CHECKPOINT_DIR / "lipsync_expert.pth"
-GAN_PRETRAINED_PATH = CHECKPOINT_DIR / "wav2lip_gan.pth"
-
-def load_checkpoint(path, model, optimizer=None, reset_optimizer=False):
-    print(f"🔄 Loading: {path}")
-    checkpoint = torch.load(path, map_location=DEVICE)
-    s = checkpoint["state_dict"]
-    new_s = {k.replace('module.', ''): v for k, v in s.items()}
-    model.load_state_dict(new_s, strict=False)
-    if optimizer and not reset_optimizer and "optimizer" in checkpoint:
-        optimizer.load_state_dict(checkpoint["optimizer"])
-    return model, optimizer, checkpoint.get("global_step", 0)
-
-def save_checkpoint(model, optimizer, step, filename):
-    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    torch.save({
-        "state_dict": model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "global_step": step
-    }, CHECKPOINT_DIR / filename)
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 def get_sync_loss(syncnet, mel, g):
-    # Crop lower half for SyncNet
-    g = g[:, :, g.size(2)//2:, :] 
-    # Resize to 96x96 (SyncNet native resolution)
-    g = torch.nn.functional.interpolate(g, size=(96, 96), mode='bilinear', align_corners=False)
+    g = g[:, :, g.size(2)//2:, :] # Crop lower half
+    g = torch.nn.functional.interpolate(g, size=(96, 96), mode='bilinear')
     a, v = syncnet(mel, g)
-    loss = nn.CosineEmbeddingLoss()(a, v, torch.ones(a.size(0)).to(DEVICE))
-    return loss
+    return nn.CosineEmbeddingLoss()(a, v, torch.ones(a.size(0)).to(DEVICE))
 
 def train():
-    print("🚀 Initializing High-Performance Training...")
+    print(f"🚀 Training on {DEVICE}")
+    
+    # Paths (Hardcoded relative to project root for simplicity)
+    DATA_ROOT = Path("data/german/preprocessed")
+    FILELIST_ROOT = Path("data/german/filelists")
+    CHECKPOINTS_DIR = Path("checkpoints")
     
     # 1. Models
     model = Wav2Lip().to(DEVICE)
     disc = Wav2Lip_Disc_Qual().to(DEVICE)
-    
-    # Load Frozen SyncNet
-    if not SYNC_EXPERT_PATH.exists():
-        print("❌ lipsync_expert.pth missing!")
-        sys.exit(1)
     syncnet = SyncNet_color().to(DEVICE)
-    load_checkpoint(SYNC_EXPERT_PATH, syncnet)
+    
+    # Load Experts
+    sync_ckpt = torch.load("checkpoints/lipsync_expert.pth", map_location=DEVICE)
+    syncnet.load_state_dict({k.replace('module.',''):v for k,v in sync_ckpt['state_dict'].items()})
     for p in syncnet.parameters(): p.requires_grad = False
-    syncnet.eval()
-
-    # 2. Optimization
-    # Paper uses specific LRs. We stick to hparams but scaled for fine-tuning.
-    optimizer = optim.Adam(model.parameters(), lr=hparams['initial_learning_rate'] * 0.5)
-    disc_optimizer = optim.Adam(disc.parameters(), lr=hparams['initial_learning_rate'] * 0.5)
     
-    # AMP Scaler
-    scaler = GradScaler(enabled=USE_AMP)
-    disc_scaler = GradScaler(enabled=USE_AMP)
+    gan_ckpt_path = "checkpoints/wav2lip_gan.pth"
+    if os.path.exists(gan_ckpt_path):
+        print("🔄 Warm-starting from Pretrained GAN")
+        gan_ckpt = torch.load(gan_ckpt_path, map_location=DEVICE)
+        model.load_state_dict({k.replace('module.',''):v for k,v in gan_ckpt['state_dict'].items()}, strict=False)
 
-    # 3. Load Pretrained Weights
-    if GAN_PRETRAINED_PATH.exists():
-        load_checkpoint(GAN_PRETRAINED_PATH, model, optimizer, reset_optimizer=True)
-    
-    # 4. Data
-    # For Speaker-Specific Speed run: Ensure train.txt only contains YOUR TARGET VIDEO
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    disc_optimizer = optim.Adam(disc.parameters(), lr=1e-4)
+    scaler = GradScaler()
+
+    # 2. Data
+    if not (FILELIST_ROOT / "train.txt").exists():
+        print("❌ Train list not found. Run preprocessing first.")
+        return
+
     train_ds = GermanDataset(DATA_ROOT, FILELIST_ROOT / "train.txt", hparams)
-    train_loader = DataLoader(train_ds, batch_size=hparams['batch_size'], shuffle=True, num_workers=4)
-    
+    train_loader = DataLoader(train_ds, batch_size=hparams['batch_size'], shuffle=True, num_workers=2)
+
+    # 3. Loop
+    global_step = 0
     recon_loss = nn.L1Loss()
     disc_loss = nn.BCELoss()
-    
-    global_step = 0
-    print(f"🎬 Starting Training (AMP={USE_AMP}, Accumulation={ACCUMULATION_STEPS})...")
-    
+
     model.train()
-    disc.train()
+    print("🎬 Starting Loop...")
+    
+    while global_step < 10000: # Short test run limit
+        for input_frames, mel, gt_frames in tqdm(train_loader):
+            input_frames, mel, gt_frames = input_frames.to(DEVICE), mel.to(DEVICE), gt_frames.to(DEVICE)
 
-    optimizer.zero_grad()
-    disc_optimizer.zero_grad()
-
-    while global_step < hparams['nepochs']:
-        for i, (input_frames, mel, gt_frames) in enumerate(tqdm(train_loader)):
+            # Generator
+            with autocast():
+                gen_frames = model(input_frames, mel)
+                l1 = recon_loss(gen_frames, gt_frames)
+                sync = get_sync_loss(syncnet, mel, gen_frames)
+                fake_pred = disc(gen_frames)
+                gan = disc_loss(fake_pred, torch.ones_like(fake_pred))
+                loss = 0.03*sync + 0.9*l1 + 0.07*gan
             
-            # Data to GPU
-            input_frames = input_frames.to(DEVICE, non_blocking=True)
-            mel = mel.to(DEVICE, non_blocking=True)
-            gt_frames = gt_frames.to(DEVICE, non_blocking=True)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
 
-            # ==========================
-            # 1. Train Generator
-            # ==========================
-            with autocast(enabled=USE_AMP):
-                generated_frames = model(input_frames, mel)
-                
-                # Losses
-                l1 = recon_loss(generated_frames, gt_frames)
-                sync_loss = get_sync_loss(syncnet, mel, generated_frames)
-                pred_fake = disc(generated_frames)
-                gen_gan_loss = disc_loss(pred_fake, torch.ones_like(pred_fake))
-                
-                # Weighted Sum (Matches Paper Logic [cite: 358])
-                # Note: We scale loss by Accumulation Steps
-                total_loss = ((0.03 * sync_loss) + (0.9 * l1) + (0.07 * gen_gan_loss)) / ACCUMULATION_STEPS
+            # Discriminator
+            with autocast():
+                real_pred = disc(gt_frames)
+                fake_pred = disc(gen_frames.detach())
+                d_loss = (disc_loss(real_pred, torch.ones_like(real_pred)) + 
+                          disc_loss(fake_pred, torch.zeros_like(fake_pred))) / 2
+            
+            scaler.scale(d_loss).backward()
+            scaler.step(disc_optimizer)
+            scaler.update()
+            disc_optimizer.zero_grad()
 
-            # Backward (Scaled)
-            scaler.scale(total_loss).backward()
-
-            # Step (only every N batches)
-            if (i + 1) % ACCUMULATION_STEPS == 0:
-                scaler.step(optimizer)
-                scaler.update()
-                optimizer.zero_grad()
-
-            # ==========================
-            # 2. Train Discriminator
-            # ==========================
-            with autocast(enabled=USE_AMP):
-                pred_real = disc(gt_frames)
-                pred_fake = disc(generated_frames.detach()) # Detach to avoid backprop to G
-                
-                loss_real = disc_loss(pred_real, torch.ones_like(pred_real))
-                loss_fake = disc_loss(pred_fake, torch.zeros_like(pred_fake))
-                d_loss = ((loss_real + loss_fake) / 2) / ACCUMULATION_STEPS
-
-            disc_scaler.scale(d_loss).backward()
-
-            if (i + 1) % ACCUMULATION_STEPS == 0:
-                disc_scaler.step(disc_optimizer)
-                disc_scaler.update()
-                disc_optimizer.zero_grad()
-                global_step += 1 # Only count actual updates
-                
-                # Logging
-                if global_step % 100 == 0: # Log frequent updates
-                    print(f" Step {global_step}: L1={l1.item():.4f} Sync={sync_loss.item():.4f}")
-
-            # Checkpointing
-            if global_step % hparams['checkpoint_interval'] == 0 and global_step > 0:
-                save_checkpoint(model, optimizer, global_step, f"german_fast_step_{global_step}.pth")
-                
-                # Early Exit Strategy: If L1 is very low, we can stop early
-                if l1.item() < 0.035:
-                    print("🎯 Target L1 reached. Stopping early.")
-                    save_checkpoint(model, optimizer, global_step, "german_final.pth")
-                    return
+            global_step += 1
+            if global_step % 50 == 0:
+                print(f"Step {global_step} | L1: {l1.item():.4f}")
 
 if __name__ == "__main__":
     train()

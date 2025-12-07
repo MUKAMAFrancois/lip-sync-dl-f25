@@ -69,17 +69,17 @@ class GermanDataset(Dataset):
             # Recursively try another random sample if this one is broken
             return self.__getitem__(random.randint(0, len(self.all_data) - 1))
 
-        # 2. Masking Strategy (Paper Section 3.1.2) [cite: 164]
+        # 2. Masking Strategy (Paper Section 3.1.2)
         # We mask the lower half of the TARGET frame.
         target_img = window_frames[2] # Center frame
         masked_img = target_img.copy()
         
         # DeepMind Paper suggests a polygon mask, but mentions a rectangular mask 
-        # is "sufficient" for the input[cite: 309]. 
+        # is "sufficient" for the input 
         # We mask the bottom half to force the model to look at context + audio.
         masked_img[self.img_size // 2:] = 0 
         
-        # 3. Reference Frame Selection (Paper Section 3.1.4) [cite: 171]
+        # 3. Reference Frame Selection (Paper Section 3.1.4)
         # The paper uses K-Means to pick "diverse" frames. 
         # For this baseline, we stick to Random Sampling but ensure it's from the same video.
         all_frames = list(vid_path.glob("*.jpg"))
@@ -89,7 +89,7 @@ class GermanDataset(Dataset):
         if ref_img is None: ref_img = target_img
         ref_img = cv2.resize(ref_img, (self.img_size, self.img_size))
 
-        # 4. Audio Processing (Paper Section 3.1.3) [cite: 254]
+        # 4. Audio Processing (Paper Section 3.1.3)
         # The paper uses a Mel-spectrogram with 80 filter banks.
         # We assume 'audio.wav' exists in the folder (created by preprocess script).
         audio_path = vid_path / "audio.wav"

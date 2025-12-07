@@ -2,7 +2,7 @@
 
 hparams = {
     # --- Audio Parameters ---
-    # The paper uses 80 filter banks for the Mel-spectrogram [cite: 255]
+    # The paper uses 80 filter banks for the Mel-spectrogram
     "num_mels": 80,
     "rescale": True,
     "rescaling_max": 0.9,
@@ -10,7 +10,7 @@ hparams = {
     "n_fft": 800,
     "hop_size": 200,
     "win_size": 800,
-    # The paper explicitly states 16kHz audio sampling [cite: 281]
+    # The paper explicitly states 16kHz audio sampling 
     "sample_rate": 16000,
     "signal_normalization": True,
     "allow_clipping_in_normalization": True,
@@ -35,7 +35,7 @@ hparams = {
     
     # --- Loss Weights ---
     # Standard Wav2Lip weights. 
-    # (Note: The paper uses different weights: Rec=1, Land=100, GAN=1e-4[cite: 360],
+    # (Note: The paper uses different weights: Rec=1, Land=100, GAN=1e-4,
     # but that requires changing the loss calculation code in train.py first.)
     "syncnet_wt": 0.03, # Lip Sync Weight
     "disc_wt": 0.07,    # GAN/Realism Weight
