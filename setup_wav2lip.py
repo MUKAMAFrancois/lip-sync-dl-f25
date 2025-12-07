@@ -15,21 +15,16 @@ def download_file(url, dest_path):
         print(f"❌ Error: {e}")
 
 def setup():
-    # Place Wav2Lip inside the project root for portability
     PROJECT_ROOT = Path.cwd()
     WAV2LIP_DIR = PROJECT_ROOT / "Wav2Lip"
     CHECKPOINTS_DIR = Path("checkpoints")
 
-    # 1. Clone
     if not WAV2LIP_DIR.exists():
         print(f"⬇️ Cloning Wav2Lip into {WAV2LIP_DIR}...")
         subprocess.run(["git", "clone", "https://github.com/Rudrabha/Wav2Lip.git"], check=True)
     
-    # 2. Fix Wav2Lip Imports (Common issue)
-    # We create an empty __init__.py so python treats it as a package
     (WAV2LIP_DIR / "__init__.py").touch()
     
-    # 3. Download Weights
     os.makedirs(CHECKPOINTS_DIR, exist_ok=True)
     models = {
         "wav2lip_gan.pth": "https://huggingface.co/camenduru/Wav2Lip/resolve/main/checkpoints/wav2lip_gan.pth",

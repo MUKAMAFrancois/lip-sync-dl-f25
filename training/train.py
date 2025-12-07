@@ -24,8 +24,14 @@ except ImportError:
 
 # Import local modules (assumes running from project root)
 sys.path.append(str(Path.cwd()))
-from training.hparams import hparams
-from training.data_loader import GermanDataset
+try:
+    from training.hparams import hparams
+    from training.data_loader import GermanDataset
+except ImportError:
+    # Fallback if running directly inside training folder
+    sys.path.append("..")
+    from training.hparams import hparams
+    from training.data_loader import GermanDataset
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -49,6 +55,10 @@ def train():
     syncnet = SyncNet_color().to(DEVICE)
     
     # Load Experts
+    if not (CHECKPOINTS_DIR / "lipsync_expert.pth").exists():
+        print("❌ Expert model missing. Run setup_wav2lip.py")
+        sys.exit(1)
+
     sync_ckpt = torch.load("checkpoints/lipsync_expert.pth", map_location=DEVICE)
     syncnet.load_state_dict({k.replace('module.',''):v for k,v in sync_ckpt['state_dict'].items()})
     for p in syncnet.parameters(): p.requires_grad = False
@@ -69,7 +79,7 @@ def train():
         return
 
     train_ds = GermanDataset(DATA_ROOT, FILELIST_ROOT / "train.txt", hparams)
-    train_loader = DataLoader(train_ds, batch_size=hparams['batch_size'], shuffle=True, num_workers=2)
+    train_loader = DataLoader(train_ds, batch_size=hparams['batch_size'], shuffle=True, num_workers=0)
 
     # 3. Loop
     global_step = 0

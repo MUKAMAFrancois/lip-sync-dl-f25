@@ -8,9 +8,7 @@ import torch
 import shutil
 import argparse
 
-# --- PATH SETUP ---
 def setup_wav2lip_import():
-    # Look for Wav2Lip in current dir
     p = Path("Wav2Lip")
     if p.exists():
         sys.path.append(str(p.resolve()))
@@ -41,11 +39,10 @@ def process_video(video_path, output_root, fa):
     if save_dir.exists(): shutil.rmtree(save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    # Audio
     os.system(f'ffmpeg -y -v error -i "{video_path}" -ac 1 -vn -acodec pcm_s16le -ar 16000 "{save_dir}/audio.wav"')
 
     cap = cv2.VideoCapture(str(video_path))
-    batch, frames = [], []
+    frames = []
     while True:
         ret, frame = cap.read()
         if not ret: break
@@ -54,14 +51,18 @@ def process_video(video_path, output_root, fa):
 
     if not frames: return []
 
-    # Process in batches
     valid_frames = 0
-    batch_size = 8
+    batch_size = 8 
+    # Use smaller batch size if memory is tight
+    
     for i in range(0, len(frames), batch_size):
         batch = frames[i:i+batch_size]
         try:
             preds = fa.get_detections_for_batch(np.array(batch))
-        except: continue
+        except Exception as e:
+            # DEBUG: Print error if detection fails
+            # print(f"⚠️ Batch failed: {e}") 
+            continue
 
         for j, landmarks in enumerate(preds):
             if landmarks is None: continue
