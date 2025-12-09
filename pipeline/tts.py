@@ -17,20 +17,20 @@ class TTSProcessor:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
         if TTSProcessor._model_cache is None:
-            print(f"🚀 Loading TTS Model ({model_name}) on {self.device}...")
+            print(f" Loading TTS Model ({model_name}) on {self.device}...")
             try:
                 tts = TTS(model_name)
                 if self.device == "cuda":
                     tts.to(self.device)
                 TTSProcessor._model_cache = tts
-                print("✅ TTS Model loaded successfully.")
+                print(" TTS Model loaded successfully.")
             except Exception as e:
-                print(f"❌ Error loading TTS Model: {e}")
+                print(f"!!! Error loading TTS Model: {e}")
                 if sys.platform == 'win32': 
                     print("Hint: On Windows, enable 'Long Paths'.")
                 raise
         else:
-            print("✅ Using cached TTS Model.")
+            print(" Using cached TTS Model.")
             
         self.tts = TTSProcessor._model_cache
 
@@ -112,7 +112,7 @@ class TTSProcessor:
         chunks = self.split_text_into_chunks(text)
         
         if len(chunks) > 1:
-            print(f"   ⚠️ Long text ({len(text)} chars). Split into {len(chunks)} safe chunks.")
+            print(f"   !!! Long text ({len(text)} chars). Split into {len(chunks)} safe chunks.")
 
         if len(chunks) == 1:
             # FAST PATH
@@ -125,7 +125,7 @@ class TTSProcessor:
                 )
                 return output_path
             except Exception as e:
-                print(f"⚠️ Standard TTS failed: {e}. Trying fallback...")
+                print(f"!!! Standard TTS failed: {e}. Trying fallback...")
 
         # MERGE PATH (Safe)
         combined_audio = AudioSegment.empty()
@@ -148,10 +148,10 @@ class TTSProcessor:
                 combined_audio += part_audio
                 
             combined_audio.export(output_path, format="wav")
-            print(f"💾 Merged Audio saved to: {output_path}")
+            print(f" Merged Audio saved to: {output_path}")
             
         except Exception as e:
-            print(f"❌ Error during Chunk/Merge: {e}")
+            print(f"!!! Error during Chunk/Merge: {e}")
             raise
         finally:
             for f in temp_files:

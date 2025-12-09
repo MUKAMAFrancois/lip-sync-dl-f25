@@ -1,8 +1,6 @@
 # training/hparams.py
 
 hparams = {
-    # --- Audio Parameters ---
-    # The paper uses 80 filter banks for the Mel-spectrogram
     "num_mels": 80,
     "rescale": True,
     "rescaling_max": 0.9,
@@ -19,8 +17,6 @@ hparams = {
     "preemphasize": True,
     "preemphasis": 0.97,
 
-    # --- Training Hyperparameters ---
-    # The paper uses Adam optimizer with LR 5e-4 for Generator and 1e-4 for Discriminator 
     "initial_learning_rate": 5e-4, 
     "nepochs": 200000000000000000, # Run until manually stopped
     

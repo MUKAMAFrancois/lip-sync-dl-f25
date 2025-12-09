@@ -24,9 +24,9 @@ class Evaluator:
                 l_type = face_alignment.LandmarksType.TWO_D
                 
             self.fa = face_alignment.FaceAlignment(l_type, device=device)
-            print("✅ FaceAlignment loaded for LMD.")
+            print(" FaceAlignment loaded for LMD.")
         except Exception as e:
-            print(f"⚠️ Could not load FaceAlignment: {e}")
+            print(f"!!! Could not load FaceAlignment: {e}")
             self.fa = None
 
     def calculate_lmd(self, gt_img, gen_img):
@@ -68,17 +68,17 @@ def main():
     gen_root = Path(args.gen_path)
     
     if not gt_root.exists():
-        print(f"❌ GT Path not found: {gt_root}")
+        print(f"!!! GT Path not found: {gt_root}")
         sys.exit(1)
         
     if not gen_root.exists():
-        print(f"❌ Gen Path not found: {gen_root}")
+        print(f"!!! Gen Path not found: {gen_root}")
         # Create it just to prevent crash if empty, but warn
         print("   (Did inference fail? Folder is missing.)")
         sys.exit(1)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"🚀 Starting Evaluation on {device}...")
+    print(f" Starting Evaluation on {device}...")
     evaluator = Evaluator(device)
     
     video_folders = [x for x in gen_root.iterdir() if x.is_dir()]
@@ -86,7 +86,7 @@ def main():
     all_ssim = []
     all_lmd = []
     
-    print(f"📊 Processing {len(video_folders)} videos...")
+    print(f" Processing {len(video_folders)} videos...")
     
     for vid_dir in tqdm(video_folders):
         vid_name = vid_dir.name

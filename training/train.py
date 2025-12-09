@@ -14,13 +14,13 @@ WAV2LIP_DIR = Path("Wav2Lip").resolve()
 if WAV2LIP_DIR.exists():
     sys.path.insert(0, str(WAV2LIP_DIR))
 else:
-    print("❌ Wav2Lip folder not found!")
+    print("!!! Wav2Lip folder not found!")
     sys.exit(1)
 
 # Import Models (No Try/Except -> We want to see the error!)
-print("🔄 Importing Wav2Lip models...")
+print(" Importing Wav2Lip models...")
 from models import Wav2Lip, Wav2Lip_Disc_qual, SyncNet_color
-print("✅ Import successful.")
+print(" Import successful.")
 
 # Import local modules
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -37,7 +37,7 @@ def get_sync_loss(syncnet, mel, g):
     return nn.CosineEmbeddingLoss()(a, v, torch.ones(a.size(0)).to(DEVICE))
 
 def train():
-    print(f"🚀 Training on {DEVICE}")
+    print(f" Training on {DEVICE}")
     
     DATA_ROOT = PROJECT_ROOT / "data/german/preprocessed"
     FILELIST_ROOT = PROJECT_ROOT / "data/german/filelists"
@@ -50,7 +50,7 @@ def train():
     
     # Load Experts
     if not (CHECKPOINTS_DIR / "lipsync_expert.pth").exists():
-        print("❌ Expert model missing.")
+        print("!!! Expert model missing.")
         sys.exit(1)
 
     sync_ckpt = torch.load(CHECKPOINTS_DIR / "lipsync_expert.pth", map_location=DEVICE)
@@ -59,7 +59,7 @@ def train():
     
     gan_ckpt_path = CHECKPOINTS_DIR / "wav2lip_gan.pth"
     if gan_ckpt_path.exists():
-        print("🔄 Warm-starting from Pretrained GAN")
+        print(" Warm-starting from Pretrained GAN")
         gan_ckpt = torch.load(gan_ckpt_path, map_location=DEVICE)
         model.load_state_dict({k.replace('module.',''):v for k,v in gan_ckpt['state_dict'].items()}, strict=False)
 
@@ -70,7 +70,7 @@ def train():
     # 2. Data
     train_list = FILELIST_ROOT / "train.txt"
     if not train_list.exists():
-        print(f"❌ Train list not found at {train_list}")
+        print(f"!!! Train list not found at {train_list}")
         return
 
     train_ds = GermanDataset(DATA_ROOT, train_list, hparams)
@@ -82,7 +82,7 @@ def train():
     disc_loss = nn.BCELoss()
 
     model.train()
-    print("🎬 Starting Loop...")
+    print(" Starting Loop...")
     
     # Limited steps for testing pipeline stability
     while global_step < 50: 

@@ -8,7 +8,6 @@ import random
 from pathlib import Path
 
 # We need the audio processor from Wav2Lip
-# (Ensure Wav2Lip is in your python path or sys.path)
 try:
     import audio 
 except ImportError:

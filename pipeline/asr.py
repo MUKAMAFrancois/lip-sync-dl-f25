@@ -64,7 +64,7 @@ class ASRProcessor:
 # --- Testing Block ---
 if __name__ == "__main__":
     
-    # Update this path to your specific file
+    # path
     TEST_AUDIO = Path("muavic-repo/data/muavic/de/audio/train/_Hk4MOw9gsA/_Hk4MOw9gsA_0000.wav")
     if TEST_AUDIO.exists():
         # First initialization (Will Load Model)

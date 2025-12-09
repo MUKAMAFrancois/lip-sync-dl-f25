@@ -7,7 +7,6 @@ import traceback
 from tqdm import tqdm
 
 # Import modules
-# Ensure these files exist in your pipeline/ folder
 try:
     from asr import ASRProcessor
     from mt import MTProcessor
@@ -37,7 +36,7 @@ def extract_audio_from_video(video_path, output_wav_path):
         subprocess.run(cmd, shell=True, check=True)
         return True
     except Exception as e:
-        print(f"❌ Error extracting audio: {e}")
+        print(f"!!! Error extracting audio: {e}")
         return False
 
 def run_dubbing_pipeline(video_path, source_lang, target_lang="english", output_root=None):
@@ -131,11 +130,11 @@ def run_dubbing_pipeline(video_path, source_lang, target_lang="english", output_
             output_path=str(final_video_path)
         )
         
-        print(f"✅ Success! Saved to: {final_video_path}")
+        print(f" Success! Saved to: {final_video_path}")
         return final_video_path
 
     except Exception as e:
-        print(f"❌ Failed processing {video_path.name}: {e}")
+        print(f"!!! Failed processing {video_path.name}: {e}")
         traceback.print_exc()
         return None
 
@@ -150,7 +149,7 @@ if __name__ == "__main__":
     input_path = Path(args.input_path)
     
     if not input_path.exists():
-        print(f"❌ Error: Input path not found: {input_path}")
+        print(f"!!! Error: Input path not found: {input_path}")
         exit(1)
 
     # Collect videos
@@ -158,11 +157,11 @@ if __name__ == "__main__":
     if input_path.is_file():
         videos_to_process.append(input_path)
     elif input_path.is_dir():
-        print(f"📂 Scanning directory: {input_path}")
+        print(f" Scanning directory: {input_path}")
         # Recursive glob for .mp4
         videos_to_process = list(input_path.rglob("*.mp4"))
     
-    print(f"🚀 Found {len(videos_to_process)} videos to process.")
+    print(f" Found {len(videos_to_process)} videos to process.")
     
     # Batch Loop
     success_count = 0
@@ -171,4 +170,4 @@ if __name__ == "__main__":
         if result:
             success_count += 1
             
-    print(f"\n🎉 Batch Complete. Successfully dubbed {success_count}/{len(videos_to_process)} videos.")
+    print(f"\n Batch Complete. Successfully dubbed {success_count}/{len(videos_to_process)} videos.")

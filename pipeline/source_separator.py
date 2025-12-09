@@ -24,7 +24,7 @@ class SourceSeparator:
         output_dir = Path(output_dir)
         output_dir.mkdir(exist_ok=True)
 
-        print(f"🎸 Separating Background from: {audio_path.name}")
+        print(f" Separating Background from: {audio_path.name}")
         
         # Demucs Command Structure:
         # -n htdemucs: Use the Hybrid Transformer model (Fast & SOTA)
@@ -54,9 +54,9 @@ class SourceSeparator:
             if not vocals_path.exists() or not accompaniment_path.exists():
                 raise FileNotFoundError("Demucs output files not found.")
                 
-            print(f"✅ Separation Complete.")
-            print(f"   🎤 Vocals: {vocals_path.name}")
-            print(f"   🎹 Accompaniment: {accompaniment_path.name}")
+            print(f" Separation Complete.")
+            print(f"    Vocals: {vocals_path.name}")
+            print(f"    Accompaniment: {accompaniment_path.name}")
             
             return {
                 "vocals": vocals_path,
@@ -64,15 +64,14 @@ class SourceSeparator:
             }
             
         except subprocess.CalledProcessError as e:
-            print(f"❌ Demucs Separation Failed: {e}")
+            print(f"!!! Demucs Separation Failed: {e}")
             raise
         except Exception as e:
-            print(f"❌ Error in Source Separation: {e}")
+            print(f"!!! Error in Source Separation: {e}")
             raise
 
 if __name__ == "__main__":
     # Test
-    # Use the extracted audio from your main pipeline run
     TEST_AUDIO = Path("data/mtedx/video/de/train/dubbing_output/original_audio_extracted.wav")
     if TEST_AUDIO.exists():
         sep = SourceSeparator()

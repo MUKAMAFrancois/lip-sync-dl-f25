@@ -78,7 +78,7 @@ class MTProcessor:
 
 # --- Testing Block ---
 if __name__ == "__main__":
-    # Test on your sample German text
+    # sample test
     sample_text = "So schön mal wieder hier in Tübingen zu sein."
     
     mt = MTProcessor()

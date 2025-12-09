@@ -27,18 +27,18 @@ except ImportError:
         from models import Wav2Lip
         import audio
     else:
-        print("❌ Error: Could not find 'models' or 'Wav2Lip' directory.")
+        print("!!! Error: Could not find 'models' or 'Wav2Lip' directory.")
         sys.exit(1)
 
 class LipSyncProcessor:
     def __init__(self, checkpoint_path, face_det_batch_size=16):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.img_size = hparams['img_size']  # Uses 256 from your config
+        self.img_size = hparams['img_size']  # from config 256
         self.face_det_batch_size = face_det_batch_size
         
-        print(f"🚀 Loading LipSync Model from {checkpoint_path}...")
+        print(f" Loading LipSync Model from {checkpoint_path}...")
         self.model = self._load_model(checkpoint_path)
-        print(f"✅ Model loaded on {self.device}. Resolution: {self.img_size}x{self.img_size}")
+        print(f" Model loaded on {self.device}. Resolution: {self.img_size}x{self.img_size}")
 
     def _load_model(self, path):
         model = Wav2Lip()
@@ -216,7 +216,7 @@ class LipSyncProcessor:
         
         # Cleanup
         if os.path.exists(temp_video): os.remove(temp_video)
-        print(f"✅ Saved to: {output_path}")
+        print(f" Saved to: {output_path}")
 
     def _infer_batch(self, img_batch, mel_batch, coords_batch, frame_idx_batch, full_frames):
         img_t = torch.FloatTensor(np.array(img_batch)).to(self.device)

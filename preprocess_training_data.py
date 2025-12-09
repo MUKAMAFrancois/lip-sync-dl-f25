@@ -23,10 +23,10 @@ def setup_wav2lip_import():
                 import face_alignment
                 return face_alignment.FaceAlignment, face_alignment.LandmarksType
             except ImportError:
-                print("❌ Critical: face-alignment not found.")
+                print("!!! Critical: face-alignment not found.")
                 sys.exit(1)
     else:
-        print("❌ Critical: Wav2Lip folder not found.")
+        print("!!! Critical: Wav2Lip folder not found.")
         sys.exit(1)
 
 def compute_affine_transform(landmarks, target_size=256):
@@ -56,7 +56,7 @@ def process_video(video_path, output_root, fa):
     cmd = f'ffmpeg -y -v error -i "{video_path}" -ac 1 -vn -acodec pcm_s16le -ar 16000 "{save_dir}/audio.wav"'
     ret = os.system(cmd)
     if ret != 0:
-        print(f"⚠️ FFmpeg failed for {vid_name}")
+        print(f"!!! FFmpeg failed for {vid_name}")
         return []
 
     cap = cv2.VideoCapture(str(video_path))
@@ -85,7 +85,7 @@ def process_video(video_path, output_root, fa):
                 preds = [p[0] if p else None for p in preds]
 
         except Exception as e:
-            # print(f"⚠️ Batch detection error: {e}") 
+            # print(f"!!! Batch detection error: {e}") 
             continue
 
         for j, landmarks in enumerate(preds):
@@ -109,7 +109,7 @@ def main():
     args = parser.parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f"🚀 Preprocessing on {device}")
+    print(f" Preprocessing on {device}")
     
     FaceAlignment, LandmarksType = setup_wav2lip_import()
     
@@ -129,7 +129,7 @@ def main():
         
         if not split_dir.exists(): continue
 
-        print(f"🎬 Processing {split}...")
+        print(f" Processing {split}...")
         videos = list(split_dir.glob("*.mp4"))
         manifest = []
         
@@ -138,7 +138,7 @@ def main():
             try:
                 manifest.extend(process_video(v, Path(args.output_root), fa))
             except Exception as e:
-                print(f"❌ Failed on {v.name}: {e}")
+                print(f"!!! Failed on {v.name}: {e}")
                 traceback.print_exc()
 
         os.makedirs(args.filelist_root, exist_ok=True)

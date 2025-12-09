@@ -6,13 +6,13 @@ import urllib.request
 
 def download_file(url, dest_path):
     if dest_path.exists():
-        print(f"✅ Found: {dest_path.name}")
+        print(f" Found: {dest_path.name}")
         return
-    print(f"⬇️ Downloading {dest_path.name}...")
+    print(f" Downloading {dest_path.name}...")
     try:
         urllib.request.urlretrieve(url, str(dest_path))
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"!!! Error: {e}")
 
 def setup():
     PROJECT_ROOT = Path.cwd()
@@ -20,7 +20,7 @@ def setup():
     CHECKPOINTS_DIR = Path("checkpoints")
 
     if not WAV2LIP_DIR.exists():
-        print(f"⬇️ Cloning Wav2Lip into {WAV2LIP_DIR}...")
+        print(f" Cloning Wav2Lip into {WAV2LIP_DIR}...")
         subprocess.run(["git", "clone", "https://github.com/Rudrabha/Wav2Lip.git"], check=True)
     
     (WAV2LIP_DIR / "__init__.py").touch()
@@ -33,7 +33,7 @@ def setup():
     for name, url in models.items():
         download_file(url, CHECKPOINTS_DIR / name)
 
-    print("✅ Setup Complete.")
+    print(" Setup Complete.")
 
 if __name__ == "__main__":
     setup()

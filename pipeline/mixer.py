@@ -17,7 +17,7 @@ class AudioMixer:
             bg_volume: Volume multiplier for background (1.0 = original).
                        Sometimes you want to lower background slightly (e.g., 0.8) so speech is clearer.
         """
-        print(f"🎛️ Mixing Audio Layers...")
+        print(f"Mixing Audio Layers...")
         
         # FFMPEG Complex Filter:
         # [0:a] is input 0 (speech)
@@ -32,10 +32,10 @@ class AudioMixer:
               
         try:
             subprocess.run(cmd, shell=True, check=True)
-            print(f"✅ Mixed Audio Saved: {output_path}")
+            print(f" Mixed Audio Saved: {output_path}")
             return output_path
         except subprocess.CalledProcessError as e:
-            print(f"❌ Mixing Failed: {e}")
+            print(f"!!! Mixing Failed: {e}")
             raise
 
 if __name__ == "__main__":
