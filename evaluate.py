@@ -10,6 +10,7 @@ import face_alignment
 import subprocess
 import warnings
 import sys
+import math
 
 warnings.filterwarnings("ignore")
 
@@ -24,9 +25,9 @@ class Evaluator:
                 l_type = face_alignment.LandmarksType.TWO_D
                 
             self.fa = face_alignment.FaceAlignment(l_type, device=device)
-            print(" FaceAlignment loaded for LMD.")
+            print("FaceAlignment loaded for LMD.")
         except Exception as e:
-            print(f"!!! Could not load FaceAlignment: {e}")
+            print(f"Could not load FaceAlignment: {e}")
             self.fa = None
 
     def calculate_lmd(self, gt_img, gen_img):
@@ -57,6 +58,39 @@ class Evaluator:
         gen_gray = cv2.cvtColor(gen_img, cv2.COLOR_BGR2GRAY)
         return ssim(gt_gray, gen_gray)
 
+    def calculate_psnr(self, gt_img, gen_img):
+        """Peak Signal-to-Noise Ratio (Higher is better)"""
+        mse = np.mean((gt_img - gen_img) ** 2)
+        if mse == 0:
+            return 100.0
+        return 20 * math.log10(255.0 / math.sqrt(mse))
+
+    def calculate_vlap(self, img):
+        """Variance of Laplacian - measure of sharpness (Higher is sharper)"""
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        return cv2.Laplacian(gray, cv2.CV_64F).var()
+
+    def run_fid(self, gt_path, gen_path):
+        """Fréchet Inception Distance (Lower is better)"""
+        print("Calculating FID...")
+        try:
+            # Calls pytorch-fid command line tool
+            cmd = [sys.executable, "-m", "pytorch_fid", str(gt_path), str(gen_path), "--device", self.device]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            output = result.stdout.strip()
+            
+            # Extract number from "FID:  12.345"
+            if "FID:" in output:
+                val = float(output.split('FID:')[-1].strip())
+                print(f"FID calculated: {val}")
+                return val
+            else:
+                print(f"FID Output not recognized: {output}")
+                return 0.0
+        except Exception as e:
+            print(f"FID Failed: {e}")
+            return 0.0
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gt_path', type=str, required=True)
@@ -68,25 +102,27 @@ def main():
     gen_root = Path(args.gen_path)
     
     if not gt_root.exists():
-        print(f"!!! GT Path not found: {gt_root}")
+        print(f"GT Path not found: {gt_root}")
         sys.exit(1)
         
     if not gen_root.exists():
-        print(f"!!! Gen Path not found: {gen_root}")
-        # Create it just to prevent crash if empty, but warn
-        print("   (Did inference fail? Folder is missing.)")
+        print(f"Gen Path not found: {gen_root}")
+        print(" (Did inference fail? Folder is missing.)")
         sys.exit(1)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f" Starting Evaluation on {device}...")
+    print(f"Starting Evaluation on {device}...")
     evaluator = Evaluator(device)
     
     video_folders = [x for x in gen_root.iterdir() if x.is_dir()]
     
     all_ssim = []
     all_lmd = []
+    all_psnr = []
+    all_vlap_gen = []
+    all_vlap_gt = []
     
-    print(f" Processing {len(video_folders)} videos...")
+    print(f"Processing {len(video_folders)} videos...")
     
     for vid_dir in tqdm(video_folders):
         vid_name = vid_dir.name
@@ -109,16 +145,42 @@ def main():
             if gen_img.shape != gt_img.shape:
                 gt_img = cv2.resize(gt_img, (gen_img.shape[1], gen_img.shape[0]))
 
+            # SSIM
             all_ssim.append(evaluator.calculate_ssim(gt_img, gen_img))
             
-            if int(gen_f.stem) % 10 == 0: # Check every 10th frame
+            # PSNR
+            all_psnr.append(evaluator.calculate_psnr(gt_img, gen_img))
+
+            # VLAP (Sharpness)
+            all_vlap_gen.append(evaluator.calculate_vlap(gen_img))
+            all_vlap_gt.append(evaluator.calculate_vlap(gt_img))
+            
+            # LMD (Sample every 10th frame for speed)
+            if int(gen_f.stem) % 10 == 0: 
                 lmd = evaluator.calculate_lmd(gt_img, gen_img)
                 if lmd is not None: all_lmd.append(lmd)
 
+    # Calculate FID over the whole set
+    fid_score = evaluator.run_fid(gt_root, gen_root)
+
     print("\n" + "="*40)
-    print(f"SSIM: {np.mean(all_ssim) if all_ssim else 0.0:.4f}")
-    print(f"LMD: {np.mean(all_lmd) if all_lmd else 0.0:.4f}")
+    print("FINAL METRICS REPORT")
     print("="*40)
+    print(f"SSIM (Visual Quality):  {np.mean(all_ssim) if all_ssim else 0.0:.4f} (Target: > 0.8)")
+    print(f"PSNR (Reconstruction):  {np.mean(all_psnr) if all_psnr else 0.0:.4f} (Target: > 30.0)")
+    print(f"VLAP (Sharpness Gen):   {np.mean(all_vlap_gen) if all_vlap_gen else 0.0:.4f} (Higher is sharper)")
+    print(f"VLAP (Sharpness GT):    {np.mean(all_vlap_gt) if all_vlap_gt else 0.0:.4f}")
+    print(f"LMD (Lip Sync Error):   {np.mean(all_lmd) if all_lmd else 0.0:.4f} (Target: < 3.5)")
+    print(f"FID (Realism):          {fid_score:.4f} (Lower is better)")
+    print("="*40)
+
+    # Save to file
+    with open("evaluation_results.txt", "w") as f:
+        f.write(f"SSIM: {np.mean(all_ssim) if all_ssim else 0.0}\n")
+        f.write(f"PSNR: {np.mean(all_psnr) if all_psnr else 0.0}\n")
+        f.write(f"VLAP_Gen: {np.mean(all_vlap_gen) if all_vlap_gen else 0.0}\n")
+        f.write(f"LMD: {np.mean(all_lmd) if all_lmd else 0.0}\n")
+        f.write(f"FID: {fid_score}\n")
 
 if __name__ == "__main__":
     main()
