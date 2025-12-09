@@ -19,7 +19,7 @@ else:
 
 # Import Models (No Try/Except -> We want to see the error!)
 print(" Importing Wav2Lip models...")
-from models import Wav2Lip, Wav2Lip_Disc_qual, SyncNet_color
+from models import Wav2Lip, Wav2Lip_disc_qual, SyncNet_color
 print(" Import successful.")
 
 # Import local modules
@@ -45,7 +45,7 @@ def train():
     
     # 1. Models
     model = Wav2Lip().to(DEVICE)
-    disc = Wav2Lip_Disc_qual().to(DEVICE)
+    disc = Wav2Lip_disc_qual().to(DEVICE)
     syncnet = SyncNet_color().to(DEVICE)
     
     # Load Experts
