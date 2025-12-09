@@ -40,7 +40,7 @@ This project is designed to run on Linux environments (Colab, Kaggle, PSC Bridge
 ### Setup
 ```bash
 # 1. Clone the repository
-git clone [https://github.com/MUKAMAFrancois/lip-sync-dl-f25.git](https://github.com/MUKAMAFrancois/lip-sync-dl-f25.git)
+git clone https://github.com/MUKAMAFrancois/lip-sync-dl-f25.git
 cd lip-sync-dl-f25
 
 # 2. Install Dependencies (Order matters to avoid version conflicts)
